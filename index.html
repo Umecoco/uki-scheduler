@@ -38,6 +38,12 @@
         <label class="checkbox-label"><input id="criticalOnly" type="checkbox" /><span>クリティカルパスのみ</span></label>
       </section>
 
+      <section class="control-strip" aria-label="メンバー管理">
+        <label><span>メンバー追加</span><input id="newMemberName" list="memberList" placeholder="例: writer_e" /></label>
+        <button id="addMemberButton" type="button">候補に追加</button>
+        <p id="memberCaption">担当者候補を追加できます</p>
+      </section>
+
       <section class="gantt-section" aria-label="ガントチャート">
         <div class="section-title"><h2>スケジュール</h2><p id="chartCaption">-</p></div>
         <div id="ganttChart" class="gantt-chart"></div>
@@ -49,10 +55,7 @@
       </section>
 
       <section class="panel-section" aria-label="パネル別進捗">
-        <div class="section-title">
-          <div><h2>パネル別進捗</h2><p>11枚前後の制作状況</p></div>
-          <button id="addPanelButton" type="button">パネル追加</button>
-        </div>
+        <div class="section-title"><div><h2>パネル別進捗</h2><p>11枚前後の制作状況</p></div><button id="addPanelButton" type="button">パネル追加</button></div>
         <div id="panelBoard" class="panel-board"></div>
       </section>
 
@@ -62,10 +65,7 @@
       </section>
 
       <section class="table-section" aria-label="タスク一覧">
-        <div class="section-title">
-          <div><h2>タスク一覧</h2><p>タスク管理とクリティカルパス管理</p></div>
-          <button id="addTaskButton" type="button">タスク追加</button>
-        </div>
+        <div class="section-title"><div><h2>タスク一覧</h2><p>タスク管理とクリティカルパス管理</p></div><button id="addTaskButton" type="button">タスク追加</button></div>
         <div class="table-wrap">
           <table>
             <thead><tr><th>操作</th><th>ID</th><th>タスク</th><th>カテゴリ</th><th>対象</th><th>担当</th><th>確認者</th><th>期間</th><th>状態</th><th>優先度</th><th>依存</th><th>ブロッカー</th><th>次アクション</th><th>バッファ</th></tr></thead>
@@ -76,6 +76,7 @@
     </main>
 
     <template id="emptyTemplate"><div class="empty-state"><strong>表示できるタスクがありません</strong><span>フィルターを変更するか、CSVを読み込んでください。</span></div></template>
+    <datalist id="memberList"></datalist>
 
     <dialog id="taskDialog" class="task-dialog">
       <form id="taskForm" method="dialog">
@@ -85,8 +86,8 @@
           <label><span>タスク名</span><input id="editName" name="name" /></label>
           <label><span>カテゴリ</span><input id="editCategory" name="category" /></label>
           <label><span>対象パネル</span><input id="editPanel" name="panel" /></label>
-          <label><span>担当者</span><input id="editOwner" name="owner" /></label>
-          <label><span>確認者</span><input id="editReviewer" name="reviewer" /></label>
+          <label><span>担当者</span><input id="editOwner" name="owner" list="memberList" /></label>
+          <label><span>確認者</span><input id="editReviewer" name="reviewer" list="memberList" /></label>
           <label><span>ステータス</span><select id="editStatus" name="status"></select></label>
           <label><span>開始予定日</span><input id="editStart" name="start" type="date" /></label>
           <label><span>期限</span><input id="editEnd" name="end" type="date" /></label>
