@@ -33,11 +33,13 @@ main > * { min-width: 0; }
 input, textarea, select { width: 100%; padding: 8px 10px; }
 textarea { min-height: 74px; resize: vertical; }
 .file-button, button { display: inline-flex; align-items: center; justify-content: center; padding: 0 14px; cursor: pointer; font-weight: 700; }
-.file-button, .primary-button { border-color: var(--work); background: var(--work); color: #ffffff; }
+.file-button { border-color: var(--work); background: var(--work); color: #ffffff; }
+.secondary-file-button { border-color: var(--wait); background: #edf4ff; color: var(--wait); }
+.primary-button { border-color: var(--work); background: var(--work); color: #ffffff; }
 .danger-button { border-color: #f1b0a9; background: #fff7f5; color: var(--late); }
 .small-button { min-height: 30px; padding: 0 10px; font-size: 0.8rem; }
 .icon-button { width: 40px; padding: 0; font-size: 1.2rem; }
-#csvInput { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); }
+#csvInput, #panelCsvInput { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); }
 .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
 .summary-item, article, .gantt-section, .table-section, .control-strip { border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
 .summary-item { padding: 16px; }
