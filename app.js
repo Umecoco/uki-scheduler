@@ -1,44 +1,28 @@
 const projectDeadline = parseDate("2026-09-30");
 const projectToday = parseDate("2026-06-02");
-const statuses = ["未着手", "作業中", "確認待ち", "修正中", "承認済", "完了", "保留", "遅延"];
-const priorities = ["高", "中", "低"];
-const done = new Set(["承認済", "完了"]);
+const statusOptions = ["未着手", "作業中", "確認待ち", "修正中", "承認済", "完了", "保留", "遅延"];
+const priorityOptions = ["高", "中", "低"];
+const doneStatuses = new Set(["承認済", "完了"]);
+const riskStatuses = new Set(["遅延", "保留"]);
 const storageKey = "uki-scheduler-panel-production-v1";
-const dayMs = 86400000;
+const panelSchemaVersion = 2;
+const dayMs = 24 * 60 * 60 * 1000;
 const fmt = new Intl.DateTimeFormat("ja-JP", { month: "numeric", day: "numeric" });
 
-const sampleCsv = `id,name,category,panel,start,end,depends,owner,reviewer,status,priority,milestone,deliverable,done_criteria,blocker,next_action,updated,impact,risk
-T001,キックオフと役割確定,企画,ALL,2026-06-03,2026-06-05,,chief_a,chief_b,未着手,高,no,体制表,全員の役割と連絡経路が確定,,初回MTGを設定,2026-06-02,全工程の開始が遅れる,事業部参加者が未確定
-T002,パネル構成案作成,企画,ALL,2026-06-06,2026-06-14,T001,chief_a,chief_b,未着手,高,no,構成案,10枚前後のタイトルと主メッセージが揃う,若手メンバー参加有無が未確定,構成案のたたきを作る,2026-06-02,後続の文章とデザインが止まる,意思決定者の稼働不足
-M001,パネル構成案Fix,マイルストーン,ALL,2026-06-17,2026-06-17,T002,chief_a,chief_b,未着手,高,yes,構成Fix,全パネルの狙いと順番が承認される,,レビュー会を確保,2026-06-02,全パネル制作の開始遅延,承認遅れ
-T003,掲載文章ドラフト作成,文章,P01|P02|P03,2026-06-18,2026-06-30,M001,writer_a,chief_a,未着手,高,no,掲載文ドラフト,各パネルの見出しと本文が仮置きされる,専門用語の粒度が未確定,事業部に用語確認を依頼,2026-06-02,初稿デザインが薄くなる,認識ずれ
-T004,画像素材収集,素材,P01|P02|P03|P04|P05,2026-06-18,2026-07-04,M001,chief_b,chief_a,遅延,高,no,素材一覧,掲載候補画像と権利確認が揃う,画像の所在が不明な領域あり,不足素材の候補を洗い出す,2026-06-02,デザイン初稿と入稿品質に影響,素材不足
-T005,パネル1-5デザイン初稿,デザイン,P01|P02|P03|P04|P05,2026-07-01,2026-07-18,T003|T004,designer_a,chief_a,未着手,高,no,Illustrator初稿,5枚分のレイアウトと掲載文が入る,,テンプレートを先行作成,2026-06-02,レビュー期間を圧迫,素材待ち
-T006,説明原稿ドラフト前半,原稿,P01|P02|P03|P04|P05,2026-07-01,2026-07-21,T003,writer_b,chief_a,未着手,中,no,説明原稿前半,説明員が読める流れになっている,,パネル構成に沿って章立て,2026-06-02,説明品質に影響,パネル文との不整合
-M002,前半パネル初稿レビュー完了,マイルストーン,P01|P02|P03|P04|P05,2026-07-25,2026-07-25,T005|T006,chief_a,chief_b,未着手,高,yes,レビュー結果,前半5枚と原稿の主要指摘が出揃う,,レビュー枠を仮押さえ,2026-06-02,後半制作への学びが遅れる,レビュー遅延
-T007,掲載文章ドラフト後半,文章,P06|P07|P08|P09|P10,2026-07-15,2026-07-31,M001,writer_c,chief_a,未着手,高,no,掲載文ドラフト後半,後半パネルの見出しと本文が仮置きされる,,P6-P10の主メッセージを確認,2026-06-02,後半デザインが止まる,構成変更
-T008,パネル6-10デザイン初稿,デザイン,P06|P07|P08|P09|P10,2026-08-01,2026-08-19,T004|T007,designer_b,chief_a,未着手,高,no,Illustrator初稿後半,5枚分のレイアウトと掲載文が入る,,前半テンプレートを流用,2026-06-02,全体レビューが遅れる,素材待ち
-T009,説明原稿ドラフト後半,原稿,P06|P07|P08|P09|P10,2026-08-01,2026-08-22,T007,writer_d,chief_b,未着手,中,no,説明原稿後半,後半5枚の説明原稿が揃う,,説明時間を仮設定,2026-06-02,説明品質に影響,原稿とパネルの差分
-M003,全パネル初稿完了,マイルストーン,ALL,2026-08-23,2026-08-23,T005|T008|T006|T009,chief_a,chief_b,未着手,高,yes,初稿一式,全パネルと説明原稿の初稿が揃う,,全体レビューを設定,2026-06-02,最終修正期間が削れる,初稿品質不足
-T010,全体レビューと指摘整理,レビュー,ALL,2026-08-24,2026-09-04,M003,chief_a,chief_b,未着手,高,no,指摘一覧,パネルと原稿の指摘が優先度付きで整理される,,レビュー観点を配布,2026-06-02,修正工程が混乱,指摘の重複
-T011,修正反映と再提出,修正,ALL,2026-09-05,2026-09-16,T010,designer_a|designer_b,chief_a,未着手,高,no,修正版AIデータ,重要指摘が反映され再確認できる,,修正担当の分担を決める,2026-06-02,承認と入稿に影響,修正量過多
-M004,最終承認,マイルストーン,ALL,2026-09-18,2026-09-18,T011,chief_a,chief_b,未着手,高,yes,承認済み一式,パネルと原稿が承認済になる,,承認会議を確保,2026-06-02,入稿準備が始められない,意思決定遅れ
-T012,入稿データ作成,入稿,ALL,2026-09-19,2026-09-25,M004,designer_a,designer_b,未着手,高,no,入稿データ,印刷仕様に合うデータができる,,印刷仕様を確認,2026-06-02,入稿期限に直撃,印刷仕様差戻し
-T013,最終校正と入稿,入稿,ALL,2026-09-26,2026-09-30,T012,designer_b,designer_a,未着手,高,no,入稿完了,9月末までに印刷入稿が完了する,,校正チェックリストを作成,2026-06-02,最終納期遅延,校正漏れ`;
-
-let tasks = [];
-let cpm = new Map();
+let allTasks = [];
+let analysis = new Map();
 let panels = [
-  p("P01", "事業全体像", "顧客課題から提供価値までを一枚で掴ませる", "製品UI全体の操作モック", "designer_a", "writer_a", "確認待ち", "未着手", "確認待ち", "未着手", "未着手", "冒頭で使う基準パネル", "主メッセージの粒度"),
-  p("P02", "技術の強み", "競合との差分を技術要素で説明する", "技術デモ画面の静止モック", "designer_a", "writer_a", "未着手", "未着手", "確認待ち", "未着手", "未着手", "図解中心", "素材候補不足"),
-  p("P03", "導入効果", "toB顧客にとっての効果を定量・定性で示す", "", "designer_a", "writer_b", "未着手", "未着手", "未着手", "未着手", "未着手", "数値の扱い注意", ""),
-  p("P04", "利用シーン", "お客の現場でどう使われるかを具体化する", "現場利用イメージの簡易モック", "designer_a", "writer_b", "未着手", "未着手", "保留", "未着手", "未着手", "写真が必要", "掲載可能写真の確認"),
-  p("P05", "導入プロセス", "検討から運用開始までの流れを説明する", "", "designer_a", "writer_c", "未着手", "未着手", "未着手", "未着手", "未着手", "フロー図候補", ""),
-  p("P06", "事例紹介", "実績から信頼感を作る", "事例紹介用の匿名化画面モック", "designer_b", "writer_c", "未着手", "未着手", "確認待ち", "未着手", "未着手", "匿名化が必要", "事例画像の権利確認"),
-  p("P07", "運用体制", "導入後の支援体制を安心材料として見せる", "", "designer_b", "writer_d", "未着手", "未着手", "未着手", "未着手", "未着手", "組織図を検討", ""),
-  p("P08", "将来展開", "今後の拡張性と事業の伸びを伝える", "将来画面のコンセプトモック", "designer_b", "writer_d", "未着手", "未着手", "未着手", "未着手", "未着手", "抽象度高め", ""),
-  p("P09", "FAQ", "説明員が質問対応しやすい論点を整理する", "", "designer_b", "writer_a", "未着手", "未着手", "未着手", "未着手", "未着手", "原稿と連動", ""),
-  p("P10", "クロージング", "次アクションにつながる締めを作る", "", "designer_b", "writer_d", "未着手", "未着手", "未着手", "未着手", "未着手", "連絡先表記確認", "")
+  panel("P01", "事業全体像", "顧客課題から提供価値までを一枚で掴ませる", "製品UI全体の操作モック", "designer_a", "writer_a", "未着手", "未着手", "確認待ち", "未着手", "未着手", "冒頭で使う基準パネル", "主メッセージの粒度"),
+  panel("P02", "技術の強み", "競合との差分を技術要素で説明する", "技術デモ画面の静止モック", "designer_a", "writer_a", "未着手", "未着手", "確認待ち", "未着手", "未着手", "図解中心", "素材候補不足"),
+  panel("P03", "導入効果", "toB顧客にとっての効果を定量・定性で示す", "", "designer_a", "writer_b", "未着手", "未着手", "未着手", "未着手", "未着手", "数値の扱い注意", ""),
+  panel("P04", "利用シーン", "お客の現場でどう使われるかを具体化する", "現場利用イメージの簡易モック", "designer_a", "writer_b", "未着手", "未着手", "保留", "未着手", "未着手", "写真が必要", "掲載可能写真の確認"),
+  panel("P05", "導入プロセス", "検討から運用開始までの流れを説明する", "", "designer_a", "writer_c", "未着手", "未着手", "未着手", "未着手", "未着手", "フロー図候補", ""),
+  panel("P06", "事例紹介", "実績から信頼感を作る", "事例紹介用の匿名化画面モック", "designer_b", "writer_c", "未着手", "未着手", "確認待ち", "未着手", "未着手", "匿名化が必要", "事例画像の権利確認"),
+  panel("P07", "運用体制", "導入後の支援体制を安心材料として見せる", "", "designer_b", "writer_d", "未着手", "未着手", "未着手", "未着手", "未着手", "組織図を検討", ""),
+  panel("P08", "将来展開", "今後の拡張性と事業の伸びを伝える", "将来画面のコンセプトモック", "designer_b", "writer_d", "未着手", "未着手", "未着手", "未着手", "未着手", "抽象度高め", ""),
+  panel("P09", "FAQ", "説明員が質問対応しやすい論点を整理する", "", "designer_b", "writer_a", "未着手", "未着手", "未着手", "未着手", "未着手", "原稿と連動", ""),
+  panel("P10", "クロージング", "次アクションにつながる締めを作る", "", "designer_b", "writer_d", "未着手", "未着手", "未着手", "未着手", "未着手", "連絡先表記確認", ""),
+  panel("P11", "追加パネル", "", "", "未設定", "未設定", "未着手", "未着手", "未着手", "未着手", "未着手", "", "")
 ];
 
 const reviews = [
@@ -49,138 +33,112 @@ const reviews = [
   ["最終承認", "ALL", "chief_a", "2026-09-16", "2026-09-18", "未着手"]
 ];
 
-const $ = (id) => document.querySelector(id);
-const el = {
-  csv: $("#csvInput"), taskCsv: $("#downloadCsvButton"), panelCsv: $("#downloadPanelsButton"), reset: $("#resetButton"), owner: $("#ownerFilter"), panel: $("#panelFilter"), status: $("#statusFilter"), crit: $("#criticalOnly"),
-  range: $("#projectRange"), overall: $("#overallProgress"), completePanels: $("#completedPanelCount"), week: $("#thisWeekCount"), late: $("#delayedCount"), wait: $("#waitingCount"), chartCaption: $("#chartCaption"), chart: $("#ganttChart"),
-  criticalCaption: $("#criticalCaption"), criticalPath: $("#criticalPath"), milestoneList: $("#milestoneList"), panelBoard: $("#panelBoard"), blockerCaption: $("#blockerCaption"), blockerList: $("#blockerList"), reviewCaption: $("#reviewCaption"), reviewList: $("#reviewList"), taskTable: $("#taskTable"),
-  dialog: $("#taskDialog"), form: $("#taskForm"), title: $("#dialogTitle"), close: $("#closeDialogButton"), cancel: $("#cancelTaskButton"),
-  editTaskId: $("#editTaskId"), editName: $("#editName"), editCategory: $("#editCategory"), editPanel: $("#editPanel"), editOwner: $("#editOwner"), editReviewer: $("#editReviewer"), editStatus: $("#editStatus"), editStart: $("#editStart"), editEnd: $("#editEnd"), editPriority: $("#editPriority"), editDepends: $("#editDepends"), editDeliverable: $("#editDeliverable"), editUpdated: $("#editUpdated"), editDoneCriteria: $("#editDoneCriteria"), editBlocker: $("#editBlocker"), editNextAction: $("#editNextAction"), editImpact: $("#editImpact"), editRisk: $("#editRisk")
+const $ = (selector) => document.querySelector(selector);
+const els = {
+  csvInput: $("#csvInput"), downloadCsvButton: $("#downloadCsvButton"), downloadPanelsButton: $("#downloadPanelsButton"), resetButton: $("#resetButton"), addPanelButton: $("#addPanelButton"), addTaskButton: $("#addTaskButton"), ownerFilter: $("#ownerFilter"), panelFilter: $("#panelFilter"), statusFilter: $("#statusFilter"), criticalOnly: $("#criticalOnly"), ganttChart: $("#ganttChart"), projectRange: $("#projectRange"), overallProgress: $("#overallProgress"), completedPanelCount: $("#completedPanelCount"), thisWeekCount: $("#thisWeekCount"), delayedCount: $("#delayedCount"), waitingCount: $("#waitingCount"), chartCaption: $("#chartCaption"), criticalCaption: $("#criticalCaption"), criticalPath: $("#criticalPath"), milestoneList: $("#milestoneList"), panelBoard: $("#panelBoard"), blockerCaption: $("#blockerCaption"), blockerList: $("#blockerList"), reviewCaption: $("#reviewCaption"), reviewList: $("#reviewList"), taskTable: $("#taskTable"), emptyTemplate: $("#emptyTemplate"), taskDialog: $("#taskDialog"), taskForm: $("#taskForm"), dialogTitle: $("#dialogTitle"), closeDialogButton: $("#closeDialogButton"), cancelTaskButton: $("#cancelTaskButton"), deleteTaskButton: $("#deleteTaskButton"), editTaskId: $("#editTaskId"), editName: $("#editName"), editCategory: $("#editCategory"), editPanel: $("#editPanel"), editOwner: $("#editOwner"), editReviewer: $("#editReviewer"), editStatus: $("#editStatus"), editStart: $("#editStart"), editEnd: $("#editEnd"), editPriority: $("#editPriority"), editDepends: $("#editDepends"), editDeliverable: $("#editDeliverable"), editUpdated: $("#editUpdated"), editDoneCriteria: $("#editDoneCriteria"), editBlocker: $("#editBlocker"), editNextAction: $("#editNextAction"), editImpact: $("#editImpact"), editRisk: $("#editRisk")
 };
 
-function p(id, title, message, mockup, designer, writer, panelTextStatus, scriptStatus, imageStatus, designStatus, approvalStatus, note, blocker) {
+function panel(id, title, message, mockup, designer, writer, panelTextStatus, scriptStatus, imageStatus, designStatus, approvalStatus, note, blocker) {
   return { id, title, message, mockup, designer, writer, panelTextStatus, scriptStatus, imageStatus, designStatus, approvalStatus, note, blocker };
 }
-
-function parseDate(value) {
-  const date = new Date(`${value}T00:00:00`);
-  if (Number.isNaN(date.getTime())) throw new Error(`日付を読み取れません: ${value}`);
-  return date;
-}
-function iso(date) { return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`; }
-function days(a, b) { return Math.round((new Date(b.getFullYear(), b.getMonth(), b.getDate()) - new Date(a.getFullYear(), a.getMonth(), a.getDate())) / dayMs); }
-function list(v) { return String(v || "").split(/[|;]/).map((x) => x.trim()).filter(Boolean); }
-function html(v) { return String(v ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;"); }
-function csvCell(v) { const t = String(v ?? ""); return /[",\n\r]/.test(t) ? `"${t.replaceAll('"', '""')}"` : t; }
-function statusClass(s) { return done.has(s) ? "done" : s === "遅延" ? "late" : s === "確認待ち" ? "wait" : s === "保留" ? "risk" : ["作業中", "修正中"].includes(s) ? "active" : ""; }
-function addDays(date, n) { const d = new Date(date); d.setDate(d.getDate() + n); return d; }
+function parseDate(value) { const date = new Date(`${value}T00:00:00`); if (Number.isNaN(date.getTime())) throw new Error(`日付を読み取れません: ${value}`); return date; }
+function toIso(date) { return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`; }
+function daysBetween(a, b) { return Math.round((new Date(b.getFullYear(), b.getMonth(), b.getDate()) - new Date(a.getFullYear(), a.getMonth(), a.getDate())) / dayMs); }
+function addDays(date, days) { const next = new Date(date); next.setDate(next.getDate() + days); return next; }
+function splitList(value) { return String(value || "").split(/[|;]/).map((item) => item.trim()).filter(Boolean); }
+function escapeHtml(value) { return String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;"); }
+function escapeAttr(value) { return escapeHtml(value).replaceAll("`", "&#096;"); }
+function csvCell(value) { const text = String(value ?? ""); return /[",\n\r]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text; }
+function unique(values) { return [...new Set(values.filter(Boolean))].sort((a, b) => a.localeCompare(b, "ja")); }
+function statusClass(status) { if (doneStatuses.has(status)) return "done"; if (status === "遅延") return "late"; if (status === "確認待ち") return "wait"; if (riskStatuses.has(status)) return "risk"; if (status === "作業中" || status === "修正中") return "active"; return ""; }
+function isWeekend(date) { return date.getDay() === 0 || date.getDay() === 6; }
 
 function parseCsv(text) {
-  const rows = [];
-  let row = [], cell = "", quoted = false;
+  const rows = []; let row = []; let cell = ""; let quoted = false;
   for (let i = 0; i < text.length; i += 1) {
-    const ch = text[i], next = text[i + 1];
-    if (ch === '"' && quoted && next === '"') { cell += '"'; i += 1; }
-    else if (ch === '"') quoted = !quoted;
-    else if (ch === "," && !quoted) { row.push(cell.trim()); cell = ""; }
-    else if ((ch === "\n" || ch === "\r") && !quoted) { if (ch === "\r" && next === "\n") i += 1; row.push(cell.trim()); if (row.some(Boolean)) rows.push(row); row = []; cell = ""; }
-    else cell += ch;
+    const char = text[i]; const next = text[i + 1];
+    if (char === '"' && quoted && next === '"') { cell += '"'; i += 1; }
+    else if (char === '"') quoted = !quoted;
+    else if (char === "," && !quoted) { row.push(cell.trim()); cell = ""; }
+    else if ((char === "\n" || char === "\r") && !quoted) { if (char === "\r" && next === "\n") i += 1; row.push(cell.trim()); if (row.some(Boolean)) rows.push(row); row = []; cell = ""; }
+    else cell += char;
   }
-  row.push(cell.trim());
-  if (row.some(Boolean)) rows.push(row);
-  const head = rows.shift().map((x) => x.toLowerCase());
-  return rows.map((r) => norm(Object.fromEntries(head.map((h, i) => [h, r[i] ?? ""]))));
+  row.push(cell.trim()); if (row.some(Boolean)) rows.push(row);
+  const headers = rows.shift().map((header) => header.toLowerCase());
+  return rows.map((values) => normalizeTask(Object.fromEntries(headers.map((header, index) => [header, values[index] ?? ""]))));
 }
 
-function norm(x) {
-  const start = parseDate(x.start), end = parseDate(x.end);
-  const milestone = ["yes", "true", "1", "y", "はい"].includes(String(x.milestone).toLowerCase());
-  return { id: x.id, name: x.name, category: x.category || (milestone ? "マイルストーン" : "タスク"), panel: x.panel || "ALL", start, end, depends: list(x.depends), owner: x.owner || "未設定", reviewer: x.reviewer || "未設定", status: x.status || "未着手", priority: x.priority || "中", milestone, deliverable: x.deliverable || "", doneCriteria: x.done_criteria || x.doneCriteria || "", blocker: x.blocker || "", nextAction: x.next_action || x.nextAction || "", updated: x.updated || "", impact: x.impact || "", risk: x.risk || "", duration: Math.max(1, days(start, end) + 1) };
+function normalizeTask(item) {
+  const start = parseDate(item.start); const end = parseDate(item.end); const milestone = ["yes", "true", "1", "y", "はい"].includes(String(item.milestone).toLowerCase());
+  return { id: item.id, name: item.name, category: item.category || (milestone ? "マイルストーン" : "タスク"), panel: item.panel || "ALL", start, end, depends: splitList(item.depends), owner: item.owner || "未設定", reviewer: item.reviewer || "未設定", status: item.status || "未着手", priority: item.priority || "中", milestone, deliverable: item.deliverable || "", doneCriteria: item.done_criteria || item.doneCriteria || "", blocker: item.blocker || "", nextAction: item.next_action || item.nextAction || "", updated: item.updated || "", impact: item.impact || "", risk: item.risk || "", duration: Math.max(1, daysBetween(start, end) + 1) };
 }
 
-function analyze() {
-  const byId = new Map(tasks.map((t) => [t.id, t]));
-  const next = new Map(tasks.map((t) => [t.id, []]));
-  tasks.forEach((t) => t.depends.forEach((d) => { if (byId.has(d)) next.get(d).push(t.id); }));
-  const order = [], visiting = new Set(), seen = new Set();
-  function visit(id) { if (seen.has(id)) return; if (visiting.has(id)) throw new Error(`依存関係が循環しています: ${id}`); visiting.add(id); byId.get(id).depends.filter((d) => byId.has(d)).forEach(visit); visiting.delete(id); seen.add(id); order.push(id); }
-  tasks.forEach((t) => visit(t.id));
-  cpm = new Map();
-  order.forEach((id) => { const t = byId.get(id); const es = Math.max(0, ...t.depends.filter((d) => cpm.has(d)).map((d) => cpm.get(d).ef)); cpm.set(id, { es, ef: es + t.duration, ls: 0, lf: 0, slack: 0, critical: false, successors: next.get(id) }); });
-  const total = Math.max(0, ...Array.from(cpm.values()).map((x) => x.ef));
-  [...order].reverse().forEach((id) => { const t = byId.get(id), m = cpm.get(id), ns = next.get(id); m.lf = ns.length ? Math.min(...ns.map((n) => cpm.get(n).ls)) : total; m.ls = m.lf - t.duration; m.slack = m.ls - m.es; m.critical = m.slack === 0; });
+function analyzeTasks(tasks) {
+  const byId = new Map(tasks.map((task) => [task.id, task])); const successors = new Map(tasks.map((task) => [task.id, []]));
+  tasks.forEach((task) => task.depends.forEach((depId) => { if (byId.has(depId)) successors.get(depId).push(task.id); }));
+  const order = []; const visiting = new Set(); const visited = new Set();
+  function visit(id) { if (visited.has(id) || !byId.has(id)) return; if (visiting.has(id)) throw new Error(`依存関係が循環しています: ${id}`); visiting.add(id); byId.get(id).depends.forEach(visit); visiting.delete(id); visited.add(id); order.push(id); }
+  tasks.forEach((task) => visit(task.id));
+  const result = new Map();
+  order.forEach((id) => { const task = byId.get(id); const es = Math.max(0, ...task.depends.filter((depId) => result.has(depId)).map((depId) => result.get(depId).ef)); result.set(id, { es, ef: es + task.duration, ls: 0, lf: 0, slack: 0, critical: false, successors: successors.get(id) }); });
+  const projectDuration = Math.max(0, ...Array.from(result.values()).map((item) => item.ef));
+  [...order].reverse().forEach((id) => { const item = result.get(id); const nextIds = successors.get(id); item.lf = nextIds.length ? Math.min(...nextIds.map((nextId) => result.get(nextId).ls)) : projectDuration; item.ls = item.lf - byId.get(id).duration; item.slack = item.ls - item.es; item.critical = item.slack === 0; });
+  return result;
 }
 
-function fill(select, values) { const old = select.value; select.innerHTML = values.map((v) => `<option value="${html(v)}">${html(v)}</option>`).join(""); if (values.includes(old)) select.value = old; }
-function unique(values) { return [...new Set(values.filter(Boolean))].sort((a, b) => a.localeCompare(b, "ja")); }
-function refreshFilters() { fill(el.owner, ["すべて", ...unique(tasks.flatMap((t) => list(t.owner)))]); fill(el.panel, ["すべて", ...unique(["ALL", ...tasks.flatMap((t) => list(t.panel))])]); fill(el.status, ["すべて", ...unique(tasks.map((t) => t.status))]); }
-function filtered() { return tasks.filter((t) => (el.owner.value === "すべて" || list(t.owner).includes(el.owner.value)) && (el.panel.value === "すべて" || t.panel === "ALL" || list(t.panel).includes(el.panel.value)) && (el.status.value === "すべて" || t.status === el.status.value) && (!el.crit.checked || cpm.get(t.id).critical)); }
+function fillSelect(select, values) { const current = select.value; select.innerHTML = values.map((value) => `<option value="${escapeAttr(value)}">${escapeHtml(value)}</option>`).join(""); if (values.includes(current)) select.value = current; }
+function populateFilters() { fillSelect(els.ownerFilter, ["すべて", ...unique(allTasks.flatMap((task) => splitList(task.owner)))]); fillSelect(els.panelFilter, ["すべて", ...unique(["ALL", ...panels.map((p) => p.id), ...allTasks.flatMap((task) => splitList(task.panel))])]); fillSelect(els.statusFilter, ["すべて", ...unique(allTasks.map((task) => task.status))]); }
+function filteredTasks() { return allTasks.filter((task) => { const meta = analysis.get(task.id); return (els.ownerFilter.value === "すべて" || splitList(task.owner).includes(els.ownerFilter.value)) && (els.panelFilter.value === "すべて" || task.panel === "ALL" || splitList(task.panel).includes(els.panelFilter.value)) && (els.statusFilter.value === "すべて" || task.status === els.statusFilter.value) && (!els.criticalOnly.checked || meta?.critical); }); }
+function refreshAnalysisAndRender() { analysis = analyzeTasks(allTasks); populateFilters(); render(); }
 
-function render() { renderSummary(); renderGantt(filtered()); renderCritical(); renderMilestones(); renderPanels(); renderBlockers(); renderReviews(); renderTable(filtered()); }
-function renderSummary() {
-  const work = tasks.filter((t) => !t.milestone), complete = work.filter((t) => done.has(t.status));
-  el.range.textContent = iso(projectDeadline);
-  el.overall.textContent = `${Math.round((complete.length / Math.max(1, work.length)) * 100)}%`;
-  el.completePanels.textContent = `${panels.filter((p) => done.has(p.approvalStatus) || p.designStatus === "完了").length}/${panels.length}枚`;
-  el.week.textContent = `${tasks.filter((t) => { const d = days(projectToday, t.end); return d >= 0 && d <= 7; }).length}件`;
-  el.late.textContent = `${tasks.filter((t) => t.status === "遅延" || (t.end < projectToday && !done.has(t.status))).length}件`;
-  el.wait.textContent = `${tasks.filter((t) => t.status === "確認待ち").length}件`;
+function render() { const tasks = filteredTasks(); renderSummary(); renderGantt(tasks); renderCriticalPath(); renderMilestones(); renderPanels(); renderBlockers(); renderReviews(); renderTable(tasks); }
+function renderSummary() { const workTasks = allTasks.filter((task) => !task.milestone); const completedTasks = workTasks.filter((task) => doneStatuses.has(task.status)); els.projectRange.textContent = toIso(projectDeadline); els.overallProgress.textContent = `${Math.round((completedTasks.length / Math.max(1, workTasks.length)) * 100)}%`; els.completedPanelCount.textContent = `${panels.filter((item) => item.approvalStatus === "承認済" || item.designStatus === "完了").length}/${panels.length}枚`; els.thisWeekCount.textContent = `${allTasks.filter((task) => { const diff = daysBetween(projectToday, task.end); return diff >= 0 && diff <= 7; }).length}件`; els.delayedCount.textContent = `${allTasks.filter((task) => task.status === "遅延" || (task.end < projectToday && !doneStatuses.has(task.status))).length}件`; els.waitingCount.textContent = `${allTasks.filter((task) => task.status === "確認待ち").length}件`; }
+function renderGantt(tasks) {
+  if (!tasks.length) { renderEmpty(els.ganttChart); return; }
+  const minDate = new Date(Math.min(...allTasks.map((task) => task.start))); const maxDate = new Date(Math.max(...allTasks.map((task) => task.end))); const totalDays = daysBetween(minDate, maxDate) + 1; const dates = Array.from({ length: totalDays }, (_, index) => addDays(minDate, index));
+  els.chartCaption.textContent = `${totalDays}日間 / ${tasks.length}件を表示`; const grid = document.createElement("div"); grid.className = "gantt-grid"; grid.style.setProperty("--days", totalDays); grid.innerHTML = `<div class="date-cell task-label">タスク</div>`;
+  dates.forEach((date) => grid.insertAdjacentHTML("beforeend", `<div class="date-cell${isWeekend(date) ? " weekend" : ""}${toIso(date) === toIso(projectToday) ? " today" : ""}">${fmt.format(date)}</div>`));
+  tasks.forEach((task) => { const meta = analysis.get(task.id); const left = daysBetween(minDate, task.start); const width = Math.max(1, daysBetween(task.start, task.end) + 1); grid.insertAdjacentHTML("beforeend", `<div class="task-label"><strong>${escapeHtml(task.name)}</strong><span>${escapeHtml(task.panel)} / ${escapeHtml(task.owner)} / ${escapeHtml(task.status)}</span></div>`); const row = document.createElement("div"); row.className = "timeline-row"; row.innerHTML = dates.map((date) => `<div class="gantt-cell${isWeekend(date) ? " weekend" : ""}"></div>`).join(""); row.insertAdjacentHTML("beforeend", `<div class="task-bar${meta.critical ? " critical" : ""}${task.milestone ? " milestone" : ""}${task.status === "遅延" ? " late" : ""}" style="left:calc(${left} * 100% / ${totalDays});${task.milestone ? "" : `width:calc(${width} * 100% / ${totalDays});`}" title="${escapeAttr(task.name)}">${task.milestone ? "" : `<span class="bar-text">${escapeHtml(task.id)}</span>`}</div>`); grid.appendChild(row); });
+  els.ganttChart.innerHTML = ""; els.ganttChart.appendChild(grid);
 }
+function renderCriticalPath() { const critical = allTasks.filter((task) => analysis.get(task.id)?.critical); const risky = critical.filter((task) => !doneStatuses.has(task.status)); els.criticalCaption.textContent = risky.length ? `${risky.length}件 / ${critical.map((task) => task.id).join(" → ")}` : "該当なし"; els.criticalPath.innerHTML = risky.map((task) => `<li><strong>${escapeHtml(task.name)}</strong><span>${escapeHtml(task.id)} / ${escapeHtml(task.panel)} / ${toIso(task.start)} - ${toIso(task.end)} / バッファ${analysis.get(task.id).slack}日</span><p>${escapeHtml(task.nextAction || task.impact || "-")}</p></li>`).join(""); }
+function renderMilestones() { els.milestoneList.innerHTML = allTasks.filter((task) => task.milestone).map((task) => { const meta = analysis.get(task.id); return `<div class="milestone-item"><strong>${escapeHtml(task.name)}</strong><span>${toIso(task.end)} / 責任者: ${escapeHtml(task.owner)} / 関連: ${escapeHtml(task.panel)}</span><span>${escapeHtml(task.doneCriteria)}</span><span class="badge ${meta.critical ? "critical" : ""}">${meta.critical ? "Critical" : `${meta.slack}日余裕`}</span></div>`; }).join(""); }
+function statusSelect(panelId, label, field, status) { return `<label class="status-pill ${statusClass(status)}"><b>${escapeHtml(label)}</b><select data-panel-id="${escapeAttr(panelId)}" data-panel-field="${escapeAttr(field)}">${statusOptions.map((value) => `<option value="${escapeAttr(value)}"${value === status ? " selected" : ""}>${escapeHtml(value)}</option>`).join("")}</select></label>`; }
+function renderPanels() { els.panelBoard.innerHTML = panels.map((item) => { const statuses = [item.panelTextStatus, item.scriptStatus, item.imageStatus, item.designStatus, item.approvalStatus]; const progress = Math.round((statuses.filter((status) => doneStatuses.has(status)).length / statuses.length) * 100); return `<article class="panel-card"><div class="panel-card-head"><strong>${escapeHtml(item.id)}</strong><div class="toolbar"><span class="badge">${progress}%</span><button class="small-button danger-button" type="button" data-delete-panel="${escapeAttr(item.id)}">削除</button></div></div><label class="panel-field"><span>タイトル</span><input data-panel-id="${escapeAttr(item.id)}" data-panel-field="title" value="${escapeAttr(item.title)}" /></label><label class="panel-field"><span>主メッセージ</span><textarea data-panel-id="${escapeAttr(item.id)}" data-panel-field="message">${escapeHtml(item.message)}</textarea></label><label class="panel-field"><span>モックアップ</span><textarea data-panel-id="${escapeAttr(item.id)}" data-panel-field="mockup">${escapeHtml(item.mockup || "")}</textarea></label><div class="mini-meta"><label>デザイン <input data-panel-id="${escapeAttr(item.id)}" data-panel-field="designer" value="${escapeAttr(item.designer)}" /></label><label>原稿 <input data-panel-id="${escapeAttr(item.id)}" data-panel-field="writer" value="${escapeAttr(item.writer)}" /></label></div><div class="status-grid">${statusSelect(item.id, "掲載文", "panelTextStatus", item.panelTextStatus)}${statusSelect(item.id, "原稿", "scriptStatus", item.scriptStatus)}${statusSelect(item.id, "画像", "imageStatus", item.imageStatus)}${statusSelect(item.id, "デザイン", "designStatus", item.designStatus)}${statusSelect(item.id, "承認", "approvalStatus", item.approvalStatus)}</div><label class="panel-field"><span>備考</span><textarea data-panel-id="${escapeAttr(item.id)}" data-panel-field="note">${escapeHtml(item.note)}</textarea></label><label class="panel-field blocker-note"><span>ブロッカー</span><textarea data-panel-id="${escapeAttr(item.id)}" data-panel-field="blocker">${escapeHtml(item.blocker)}</textarea></label></article>`; }).join(""); }
+function renderBlockers() { const blockedTasks = allTasks.filter((task) => task.blocker); const blockedPanels = panels.filter((item) => item.blocker); els.blockerCaption.textContent = `${blockedTasks.length + blockedPanels.length}件`; els.blockerList.innerHTML = [...blockedTasks.map((task) => `<div class="blocker-item"><strong>${escapeHtml(task.id)} ${escapeHtml(task.name)}</strong><span>${escapeHtml(task.blocker)}</span><p>${escapeHtml(task.nextAction)}</p></div>`), ...blockedPanels.map((item) => `<div class="blocker-item"><strong>${escapeHtml(item.id)} ${escapeHtml(item.title)}</strong><span>${escapeHtml(item.blocker)}</span><p>${escapeHtml(item.note)}</p></div>`)].join(""); }
+function renderReviews() { els.reviewCaption.textContent = `${reviews.filter((item) => item[5] === "確認待ち" || item[5] === "未着手").length}件が未完了`; els.reviewList.innerHTML = reviews.map((item) => `<div class="review-item"><strong>${escapeHtml(item[0])}</strong><span>${escapeHtml(item[1])} / 確認者: ${escapeHtml(item[2])}</span><span>依頼: ${escapeHtml(item[3])} / 期限: ${escapeHtml(item[4])}</span><span class="badge ${statusClass(item[5])}">${escapeHtml(item[5])}</span></div>`).join(""); }
+function renderTable(tasks) { els.taskTable.innerHTML = tasks.length ? tasks.map((task) => { const meta = analysis.get(task.id); return `<tr class="${meta.critical ? "critical-row" : ""}"><td><button class="small-button" type="button" data-edit-task="${escapeAttr(task.id)}">編集</button></td><td>${escapeHtml(task.id)}</td><td>${escapeHtml(task.name)}</td><td>${escapeHtml(task.category)}</td><td>${escapeHtml(task.panel)}</td><td>${escapeHtml(task.owner)}</td><td>${escapeHtml(task.reviewer)}</td><td>${toIso(task.start)} - ${toIso(task.end)}</td><td><span class="badge ${statusClass(task.status)}">${escapeHtml(task.status)}</span></td><td>${escapeHtml(task.priority)}</td><td>${escapeHtml(task.depends.join(", ") || "-")}</td><td>${escapeHtml(task.blocker || "-")}</td><td>${escapeHtml(task.nextAction || "-")}</td><td>${meta.critical ? "Critical" : `${meta.slack}日`}</td></tr>`; }).join("") : `<tr><td colspan="14">表示できるタスクがありません</td></tr>`; }
+function renderEmpty(target) { target.innerHTML = ""; target.appendChild(els.emptyTemplate.content.cloneNode(true)); }
 
-function renderGantt(view) {
-  if (!view.length) { el.chart.innerHTML = `<div class="empty-state"><strong>表示できるタスクがありません</strong><span>フィルターを変更してください。</span></div>`; return; }
-  const min = new Date(Math.min(...tasks.map((t) => t.start))), max = new Date(Math.max(...tasks.map((t) => t.end))), total = days(min, max) + 1;
-  el.chartCaption.textContent = `${total}日間 / ${view.length}件を表示`;
-  const dates = Array.from({ length: total }, (_, i) => addDays(min, i));
-  const grid = document.createElement("div"); grid.className = "gantt-grid"; grid.style.setProperty("--days", total);
-  grid.innerHTML = `<div class="date-cell task-label">タスク</div>` + dates.map((d) => `<div class="date-cell${[0, 6].includes(d.getDay()) ? " weekend" : ""}${iso(d) === iso(projectToday) ? " today" : ""}">${fmt.format(d)}</div>`).join("");
-  view.forEach((t) => {
-    const m = cpm.get(t.id), left = days(min, t.start), width = Math.max(1, days(t.start, t.end) + 1);
-    grid.insertAdjacentHTML("beforeend", `<div class="task-label"><strong>${html(t.name)}</strong><span>${html(t.panel)} / ${html(t.owner)} / ${html(t.status)}</span></div>`);
-    const row = document.createElement("div"); row.className = "timeline-row"; row.innerHTML = dates.map((d) => `<div class="gantt-cell${[0, 6].includes(d.getDay()) ? " weekend" : ""}"></div>`).join("");
-    row.insertAdjacentHTML("beforeend", `<div class="task-bar${m.critical ? " critical" : ""}${t.milestone ? " milestone" : ""}${t.status === "遅延" ? " late" : ""}" style="left:calc(${left} * 100% / ${total});${t.milestone ? "" : `width:calc(${width} * 100% / ${total})`}" title="${html(t.name)}">${t.milestone ? "" : `<span class="bar-text">${html(t.id)}</span>`}</div>`);
-    grid.appendChild(row);
-  });
-  el.chart.innerHTML = ""; el.chart.appendChild(grid);
-}
+function createBlankPanel(id) { return panel(id, "新規パネル", "", "", "未設定", "未設定", "未着手", "未着手", "未着手", "未着手", "未着手", "", ""); }
+function nextPanelId() { const max = Math.max(0, ...panels.map((item) => Number(item.id.replace(/^P/i, ""))).filter(Number.isFinite)); return `P${String(max + 1).padStart(2, "0")}`; }
+function ensurePanelMigration(state) { if (state.panelSchemaVersion >= panelSchemaVersion) return; if (!panels.some((item) => item.id === "P11")) panels.push(createBlankPanel("P11")); }
+function addPanel() { panels.push(createBlankPanel(nextPanelId())); saveLocalState(); render(); }
+function deletePanel(panelId) { const item = panels.find((panelItem) => panelItem.id === panelId); if (!item) return; if (!confirm(`${item.id} ${item.title || "このパネル"}を削除しますか？`)) return; panels = panels.filter((panelItem) => panelItem.id !== panelId); saveLocalState(); render(); }
+function nextTaskId() { const max = Math.max(0, ...allTasks.filter((task) => /^T\d+$/i.test(task.id)).map((task) => Number(task.id.replace(/^T/i, ""))).filter(Number.isFinite)); return `T${String(max + 1).padStart(3, "0")}`; }
+function addTask() { const id = nextTaskId(); const start = toIso(projectToday); const end = toIso(addDays(projectToday, 7)); allTasks.push(normalizeTask({ id, name: "新規タスク", category: "タスク", panel: "ALL", start, end, depends: "", owner: "未設定", reviewer: "未設定", status: "未着手", priority: "中", milestone: "no", deliverable: "", done_criteria: "", blocker: "", next_action: "", updated: start, impact: "", risk: "" })); refreshAnalysisAndRender(); saveLocalState(); openTaskEditor(id); }
+function deleteCurrentTask() { const taskId = els.editTaskId.value; const task = allTasks.find((item) => item.id === taskId); if (!task) return; if (!confirm(`${task.id} ${task.name || "このタスク"}を削除しますか？`)) return; allTasks = allTasks.filter((item) => item.id !== taskId); allTasks.forEach((item) => { item.depends = item.depends.filter((depId) => depId !== taskId); }); refreshAnalysisAndRender(); saveLocalState(); els.taskDialog.close(); }
 
-function renderCritical() {
-  const risky = tasks.filter((t) => cpm.get(t.id).critical && !done.has(t.status));
-  el.criticalCaption.textContent = risky.length ? `${risky.length}件 / ${tasks.filter((t) => cpm.get(t.id).critical).map((t) => t.id).join(" → ")}` : "該当なし";
-  el.criticalPath.innerHTML = risky.map((t) => `<li><strong>${html(t.name)}</strong><span>${html(t.id)} / ${html(t.panel)} / ${iso(t.start)} - ${iso(t.end)} / バッファ${cpm.get(t.id).slack}日</span><p>${html(t.nextAction || t.impact || "-")}</p></li>`).join("");
-}
-function renderMilestones() { el.milestoneList.innerHTML = tasks.filter((t) => t.milestone).map((t) => `<div class="milestone-item"><strong>${html(t.name)}</strong><span>${iso(t.end)} / 責任者: ${html(t.owner)} / 関連: ${html(t.panel)}</span><span>${html(t.doneCriteria)}</span><span class="badge ${cpm.get(t.id).critical ? "critical" : ""}">${cpm.get(t.id).critical ? "Critical" : `${cpm.get(t.id).slack}日余裕`}</span></div>`).join(""); }
+function saveLocalState() { localStorage.setItem(storageKey, JSON.stringify({ tasks: allTasks.map((task) => ({ ...task, start: toIso(task.start), end: toIso(task.end) })), panels, panelSchemaVersion })); }
+function loadLocalState() { const raw = localStorage.getItem(storageKey); if (!raw) return false; try { const state = JSON.parse(raw); allTasks = state.tasks.map((task) => normalizeTask({ ...task, start: task.start, end: task.end, depends: Array.isArray(task.depends) ? task.depends.join("|") : task.depends, milestone: task.milestone ? "yes" : "no", done_criteria: task.doneCriteria, next_action: task.nextAction })); if (Array.isArray(state.panels)) panels = state.panels; ensurePanelMigration(state); refreshAnalysisAndRender(); saveLocalState(); return true; } catch { localStorage.removeItem(storageKey); return false; } }
+function loadCsv(text) { try { allTasks = parseCsv(text); refreshAnalysisAndRender(); saveLocalState(); } catch (error) { alert(error.message); } }
+async function loadInitialCsv() { try { const response = await fetch("sample-schedule.csv", { cache: "no-store" }); loadCsv(await response.text()); } catch { loadCsv(`id,name,category,panel,start,end,depends,owner,reviewer,status,priority,milestone,deliverable,done_criteria,blocker,next_action,updated,impact,risk\nT001,新規タスク,タスク,ALL,2026-06-03,2026-06-10,,未設定,未設定,未着手,中,no,,,,,2026-06-02,,`); } }
+function downloadCsvFile(headers, rows, filename) { const csv = [headers, ...rows].map((row) => row.map(csvCell).join(",")).join("\n"); const blob = new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" }); const url = URL.createObjectURL(blob); const link = document.createElement("a"); link.href = url; link.download = filename; link.click(); URL.revokeObjectURL(url); }
+function downloadTasksCsv() { downloadCsvFile(["id", "name", "category", "panel", "start", "end", "depends", "owner", "reviewer", "status", "priority", "milestone", "deliverable", "done_criteria", "blocker", "next_action", "updated", "impact", "risk"], allTasks.map((task) => [task.id, task.name, task.category, task.panel, toIso(task.start), toIso(task.end), task.depends.join("|"), task.owner, task.reviewer, task.status, task.priority, task.milestone ? "yes" : "no", task.deliverable, task.doneCriteria, task.blocker, task.nextAction, task.updated, task.impact, task.risk]), `panel-production-tasks-${toIso(new Date())}.csv`); }
+function downloadPanelsCsv() { downloadCsvFile(["panel_id", "title", "message", "mockup", "designer", "writer", "panel_text_status", "script_status", "image_status", "design_status", "approval_status", "note", "blocker"], panels.map((item) => [item.id, item.title, item.message, item.mockup || "", item.designer, item.writer, item.panelTextStatus, item.scriptStatus, item.imageStatus, item.designStatus, item.approvalStatus, item.note, item.blocker]), `panel-production-panels-${toIso(new Date())}.csv`); }
 
-function statusSelect(id, label, field, value) { return `<label class="status-pill ${statusClass(value)}"><b>${html(label)}</b><select data-panel-id="${html(id)}" data-panel-field="${field}">${statuses.map((s) => `<option value="${html(s)}"${s === value ? " selected" : ""}>${html(s)}</option>`).join("")}</select></label>`; }
-function renderPanels() {
-  el.panelBoard.innerHTML = panels.map((x) => {
-    const values = [x.panelTextStatus, x.scriptStatus, x.imageStatus, x.designStatus, x.approvalStatus];
-    const progress = Math.round((values.filter((s) => done.has(s)).length / values.length) * 100);
-    return `<article class="panel-card"><div class="panel-card-head"><strong>${html(x.id)}</strong><span class="badge">${progress}%</span></div><label class="panel-field"><span>タイトル</span><input data-panel-id="${html(x.id)}" data-panel-field="title" value="${html(x.title)}" /></label><label class="panel-field"><span>主メッセージ</span><textarea data-panel-id="${html(x.id)}" data-panel-field="message">${html(x.message)}</textarea></label><label class="panel-field"><span>モックアップ</span><textarea data-panel-id="${html(x.id)}" data-panel-field="mockup">${html(x.mockup || "")}</textarea></label><div class="mini-meta"><label>デザイン <input data-panel-id="${html(x.id)}" data-panel-field="designer" value="${html(x.designer)}" /></label><label>原稿 <input data-panel-id="${html(x.id)}" data-panel-field="writer" value="${html(x.writer)}" /></label></div><div class="status-grid">${statusSelect(x.id, "掲載文", "panelTextStatus", x.panelTextStatus)}${statusSelect(x.id, "原稿", "scriptStatus", x.scriptStatus)}${statusSelect(x.id, "画像", "imageStatus", x.imageStatus)}${statusSelect(x.id, "デザイン", "designStatus", x.designStatus)}${statusSelect(x.id, "承認", "approvalStatus", x.approvalStatus)}</div><label class="panel-field"><span>備考</span><textarea data-panel-id="${html(x.id)}" data-panel-field="note">${html(x.note)}</textarea></label><label class="panel-field blocker-note"><span>ブロッカー</span><textarea data-panel-id="${html(x.id)}" data-panel-field="blocker">${html(x.blocker)}</textarea></label></article>`;
-  }).join("");
-}
-function renderBlockers() { const blockedTasks = tasks.filter((t) => t.blocker), blockedPanels = panels.filter((p) => p.blocker); el.blockerCaption.textContent = `${blockedTasks.length + blockedPanels.length}件`; el.blockerList.innerHTML = [...blockedTasks.map((t) => `<div class="blocker-item"><strong>${html(t.id)} ${html(t.name)}</strong><span>${html(t.blocker)}</span><p>${html(t.nextAction)}</p></div>`), ...blockedPanels.map((p) => `<div class="blocker-item"><strong>${html(p.id)} ${html(p.title)}</strong><span>${html(p.blocker)}</span><p>${html(p.note)}</p></div>`)].join(""); }
-function renderReviews() { el.reviewCaption.textContent = `${reviews.filter((r) => ["未着手", "確認待ち"].includes(r[5])).length}件が未完了`; el.reviewList.innerHTML = reviews.map((r) => `<div class="review-item"><strong>${html(r[0])}</strong><span>${html(r[1])} / 確認者: ${html(r[2])}</span><span>依頼: ${html(r[3])} / 期限: ${html(r[4])}</span><span class="badge ${statusClass(r[5])}">${html(r[5])}</span></div>`).join(""); }
-function renderTable(view) { el.taskTable.innerHTML = view.length ? view.map((t) => `<tr class="${cpm.get(t.id).critical ? "critical-row" : ""}"><td><button class="small-button" type="button" data-edit-task="${html(t.id)}">編集</button></td><td>${html(t.id)}</td><td>${html(t.name)}</td><td>${html(t.category)}</td><td>${html(t.panel)}</td><td>${html(t.owner)}</td><td>${html(t.reviewer)}</td><td>${iso(t.start)} - ${iso(t.end)}</td><td><span class="badge ${statusClass(t.status)}">${html(t.status)}</span></td><td>${html(t.priority)}</td><td>${html(t.depends.join(", ") || "-")}</td><td>${html(t.blocker || "-")}</td><td>${html(t.nextAction || "-")}</td><td>${cpm.get(t.id).critical ? "Critical" : `${cpm.get(t.id).slack}日`}</td></tr>`).join("") : `<tr><td colspan="14">表示できるタスクがありません</td></tr>`; }
+function openTaskEditor(taskId) { const task = allTasks.find((item) => item.id === taskId); if (!task) return; els.dialogTitle.textContent = `${task.id} ${task.name}`; els.editTaskId.value = task.id; els.editName.value = task.name; els.editCategory.value = task.category; els.editPanel.value = task.panel; els.editOwner.value = task.owner; els.editReviewer.value = task.reviewer; els.editStatus.value = task.status; els.editStart.value = toIso(task.start); els.editEnd.value = toIso(task.end); els.editPriority.value = task.priority; els.editDepends.value = task.depends.join("|"); els.editDeliverable.value = task.deliverable; els.editUpdated.value = task.updated || toIso(projectToday); els.editDoneCriteria.value = task.doneCriteria; els.editBlocker.value = task.blocker; els.editNextAction.value = task.nextAction; els.editImpact.value = task.impact; els.editRisk.value = task.risk; els.taskDialog.showModal(); }
+function saveTaskFromDialog() { const task = allTasks.find((item) => item.id === els.editTaskId.value); if (!task) return; const start = parseDate(els.editStart.value); const end = parseDate(els.editEnd.value); Object.assign(task, { name: els.editName.value.trim(), category: els.editCategory.value.trim(), panel: els.editPanel.value.trim() || "ALL", owner: els.editOwner.value.trim() || "未設定", reviewer: els.editReviewer.value.trim() || "未設定", status: els.editStatus.value, start, end, priority: els.editPriority.value, depends: splitList(els.editDepends.value), deliverable: els.editDeliverable.value.trim(), updated: els.editUpdated.value, doneCriteria: els.editDoneCriteria.value.trim(), blocker: els.editBlocker.value.trim(), nextAction: els.editNextAction.value.trim(), impact: els.editImpact.value.trim(), risk: els.editRisk.value.trim(), duration: Math.max(1, daysBetween(start, end) + 1) }); refreshAnalysisAndRender(); saveLocalState(); els.taskDialog.close(); }
 
-function save() { localStorage.setItem(storageKey, JSON.stringify({ tasks: tasks.map((t) => ({ ...t, start: iso(t.start), end: iso(t.end) })), panels })); }
-function load() { try { const raw = localStorage.getItem(storageKey); if (!raw) return false; const s = JSON.parse(raw); tasks = s.tasks.map((t) => norm({ ...t, start: t.start, end: t.end, depends: Array.isArray(t.depends) ? t.depends.join("|") : t.depends, milestone: t.milestone ? "yes" : "no", done_criteria: t.doneCriteria, next_action: t.nextAction })); if (Array.isArray(s.panels)) panels = s.panels; analyze(); refreshFilters(); render(); return true; } catch { localStorage.removeItem(storageKey); return false; } }
-function loadCsv(text) { try { tasks = parseCsv(text); analyze(); refreshFilters(); render(); save(); } catch (e) { alert(e.message); } }
-function download(headers, rows, name) { const csv = [headers, ...rows].map((r) => r.map(csvCell).join(",")).join("\n"); const blob = new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" }); const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = name; a.click(); URL.revokeObjectURL(url); }
-function downloadTasks() { download(["id", "name", "category", "panel", "start", "end", "depends", "owner", "reviewer", "status", "priority", "milestone", "deliverable", "done_criteria", "blocker", "next_action", "updated", "impact", "risk"], tasks.map((t) => [t.id, t.name, t.category, t.panel, iso(t.start), iso(t.end), t.depends.join("|"), t.owner, t.reviewer, t.status, t.priority, t.milestone ? "yes" : "no", t.deliverable, t.doneCriteria, t.blocker, t.nextAction, t.updated, t.impact, t.risk]), `panel-production-tasks-${iso(new Date())}.csv`); }
-function downloadPanels() { download(["panel_id", "title", "message", "mockup", "designer", "writer", "panel_text_status", "script_status", "image_status", "design_status", "approval_status", "note", "blocker"], panels.map((p) => [p.id, p.title, p.message, p.mockup || "", p.designer, p.writer, p.panelTextStatus, p.scriptStatus, p.imageStatus, p.designStatus, p.approvalStatus, p.note, p.blocker]), `panel-production-panels-${iso(new Date())}.csv`); }
-
-function openEditor(id) { const t = tasks.find((x) => x.id === id); if (!t) return; el.title.textContent = `${t.id} ${t.name}`; el.editTaskId.value = t.id; el.editName.value = t.name; el.editCategory.value = t.category; el.editPanel.value = t.panel; el.editOwner.value = t.owner; el.editReviewer.value = t.reviewer; el.editStatus.value = t.status; el.editStart.value = iso(t.start); el.editEnd.value = iso(t.end); el.editPriority.value = t.priority; el.editDepends.value = t.depends.join("|"); el.editDeliverable.value = t.deliverable; el.editUpdated.value = t.updated || iso(projectToday); el.editDoneCriteria.value = t.doneCriteria; el.editBlocker.value = t.blocker; el.editNextAction.value = t.nextAction; el.editImpact.value = t.impact; el.editRisk.value = t.risk; el.dialog.showModal(); }
-function saveEditor() { const t = tasks.find((x) => x.id === el.editTaskId.value); if (!t) return; Object.assign(t, { name: el.editName.value.trim(), category: el.editCategory.value.trim(), panel: el.editPanel.value.trim() || "ALL", owner: el.editOwner.value.trim() || "未設定", reviewer: el.editReviewer.value.trim() || "未設定", status: el.editStatus.value, start: parseDate(el.editStart.value), end: parseDate(el.editEnd.value), priority: el.editPriority.value, depends: list(el.editDepends.value), deliverable: el.editDeliverable.value.trim(), updated: el.editUpdated.value, doneCriteria: el.editDoneCriteria.value.trim(), blocker: el.editBlocker.value.trim(), nextAction: el.editNextAction.value.trim(), impact: el.editImpact.value.trim(), risk: el.editRisk.value.trim() }); t.duration = Math.max(1, days(t.start, t.end) + 1); analyze(); refreshFilters(); render(); save(); el.dialog.close(); }
-
-fill(el.editStatus, statuses); fill(el.editPriority, priorities);
-el.csv.addEventListener("change", async (e) => { const [file] = e.target.files; if (file) loadCsv(await file.text()); });
-el.reset.addEventListener("click", () => { localStorage.removeItem(storageKey); el.csv.value = ""; loadCsv(sampleCsv); });
-el.taskCsv.addEventListener("click", downloadTasks); el.panelCsv.addEventListener("click", downloadPanels);
-el.taskTable.addEventListener("click", (e) => { const b = e.target.closest("[data-edit-task]"); if (b) openEditor(b.dataset.editTask); });
-el.form.addEventListener("submit", (e) => { e.preventDefault(); saveEditor(); });
-el.close.addEventListener("click", () => el.dialog.close()); el.cancel.addEventListener("click", () => el.dialog.close());
-[el.owner, el.panel, el.status, el.crit].forEach((x) => x.addEventListener("change", render));
-el.panelBoard.addEventListener("input", (e) => { const id = e.target.dataset.panelId, field = e.target.dataset.panelField; const item = panels.find((p) => p.id === id); if (item && field) { item[field] = e.target.value; save(); renderSummary(); renderBlockers(); } });
-el.panelBoard.addEventListener("change", (e) => { const id = e.target.dataset.panelId, field = e.target.dataset.panelField; const item = panels.find((p) => p.id === id); if (item && field) { item[field] = e.target.value; save(); render(); } });
-if (!load()) loadCsv(sampleCsv);
+fillSelect(els.editStatus, statusOptions); fillSelect(els.editPriority, priorityOptions);
+els.csvInput.addEventListener("change", async (event) => { const [file] = event.target.files; if (file) loadCsv(await file.text()); });
+els.resetButton.addEventListener("click", () => { els.csvInput.value = ""; localStorage.removeItem(storageKey); loadInitialCsv(); });
+els.downloadCsvButton.addEventListener("click", downloadTasksCsv); els.downloadPanelsButton.addEventListener("click", downloadPanelsCsv); els.addPanelButton.addEventListener("click", addPanel); els.addTaskButton.addEventListener("click", addTask);
+els.taskTable.addEventListener("click", (event) => { const button = event.target.closest("[data-edit-task]"); if (button) openTaskEditor(button.dataset.editTask); });
+els.taskForm.addEventListener("submit", (event) => { event.preventDefault(); saveTaskFromDialog(); });
+els.closeDialogButton.addEventListener("click", () => els.taskDialog.close()); els.cancelTaskButton.addEventListener("click", () => els.taskDialog.close()); els.deleteTaskButton.addEventListener("click", deleteCurrentTask);
+els.panelBoard.addEventListener("input", (event) => { const field = event.target.dataset.panelField; const panelId = event.target.dataset.panelId; const item = panels.find((panelItem) => panelItem.id === panelId); if (item && field) { item[field] = event.target.value; saveLocalState(); renderSummary(); renderBlockers(); } });
+els.panelBoard.addEventListener("change", (event) => { const field = event.target.dataset.panelField; const panelId = event.target.dataset.panelId; const item = panels.find((panelItem) => panelItem.id === panelId); if (item && field) { item[field] = event.target.value; saveLocalState(); render(); } });
+els.panelBoard.addEventListener("click", (event) => { const button = event.target.closest("[data-delete-panel]"); if (button) deletePanel(button.dataset.deletePanel); });
+[els.ownerFilter, els.panelFilter, els.statusFilter, els.criticalOnly].forEach((control) => control.addEventListener("change", render));
+if (!loadLocalState()) loadInitialCsv();
