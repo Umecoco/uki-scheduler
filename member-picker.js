@@ -42,8 +42,12 @@
   function syncInput(input) {
     const select = patched.get(input);
     if (!select) return;
-    select.innerHTML = optionHtml(input);
-    select.value = input.value;
+    const nextValues = memberValues(input);
+    const currentValues = Array.from(select.options).map((option) => option.value);
+    if (nextValues.join("\u0000") !== currentValues.join("\u0000")) {
+      select.innerHTML = optionHtml(input);
+    }
+    if (select.value !== input.value) select.value = input.value;
   }
 
   function patchAll() {
