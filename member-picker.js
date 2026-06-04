@@ -16,7 +16,7 @@
   }
 
   function patchInput(input) {
-    if (!input || input.type === "hidden" || input.dataset.memberPickerPatched === "true") return;
+    if (!input || input.id === "newMemberName" || input.type === "hidden" || input.dataset.memberPickerPatched === "true") return;
 
     const select = document.createElement("select");
     select.className = "member-choice-select";
