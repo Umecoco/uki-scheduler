@@ -1,6 +1,7 @@
 (function () {
   const storageKey = "uki-scheduler-panel-production-v1";
   const manualCriticalKey = `${storageKey}-manual-critical`;
+  const categoriesKey = `${storageKey}-categories`;
   let decorateScheduled = false;
 
   function loadState() {
@@ -23,6 +24,59 @@
     localStorage.setItem(manualCriticalKey, JSON.stringify([...ids]));
   }
 
+  function categoryValues(currentValue = "") {
+    let saved = [];
+    try {
+      saved = JSON.parse(localStorage.getItem(categoriesKey) || "[]");
+    } catch {
+      saved = [];
+    }
+    const taskCategories = loadState()?.tasks?.map((task) => task.category).filter(Boolean) || [];
+    return [...new Set([...saved, ...taskCategories, currentValue].filter(Boolean))].sort((a, b) => a.localeCompare(b, "ja"));
+  }
+
+  function saveCategoryValues(values) {
+    localStorage.setItem(categoriesKey, JSON.stringify([...new Set(values)].sort((a, b) => a.localeCompare(b, "ja"))));
+  }
+
+  function categoryOptionHtml(currentValue = "") {
+    return categoryValues(currentValue)
+      .map((value) => `<option value="${escapeHtml(value)}"${value === currentValue ? " selected" : ""}>${escapeHtml(value)}</option>`)
+      .join("");
+  }
+
+  function setupCategorySelect() {
+    const input = document.querySelector("#editCategory");
+    if (!input) return;
+    let select = document.querySelector("#editCategoryChoice");
+    if (!select) {
+      select = document.createElement("select");
+      select.id = "editCategoryChoice";
+      select.addEventListener("change", () => {
+        input.value = select.value;
+      });
+      input.hidden = true;
+      input.insertAdjacentElement("afterend", select);
+    }
+    select.innerHTML = categoryOptionHtml(input.value);
+    select.value = input.value;
+  }
+
+  function addCategory() {
+    const input = document.querySelector("#newCategoryName");
+    const name = input?.value.trim();
+    if (!name) return;
+    saveCategoryValues([...categoryValues(), name]);
+    input.value = "";
+    refreshCategoryCaption();
+    setupCategorySelect();
+  }
+
+  function refreshCategoryCaption() {
+    const caption = document.querySelector("#categoryCaption");
+    if (caption) caption.textContent = `${categoryValues().length}件の候補`;
+  }
+
   function addEditorControls() {
     const grid = document.querySelector("#taskForm .form-grid");
     const category = document.querySelector("#editCategory");
@@ -34,10 +88,11 @@
 
     const criticalLabel = document.createElement("label");
     criticalLabel.dataset.taskMetaControl = "true";
-    criticalLabel.innerHTML = `<span>クリティカルパス</span><select id="editCriticalChoice"><option value="auto">自動判定</option><option value="yes">指定する</option></select>`;
+    criticalLabel.innerHTML = `<span>クリティカルパス</span><select id="editCriticalChoice"><option value="auto">自動判定（期間・依存関係）</option><option value="yes">手動でクリティカルに追加</option></select>`;
 
     category.closest("label").insertAdjacentElement("afterend", criticalLabel);
     category.closest("label").insertAdjacentElement("afterend", typeLabel);
+    setupCategorySelect();
   }
 
   function syncEditorControls() {
@@ -49,6 +104,20 @@
     const critical = document.querySelector("#editCriticalChoice");
     if (milestone) milestone.value = task?.milestone ? "yes" : "no";
     if (critical) critical.value = manualCriticalIds().has(taskId) ? "yes" : "auto";
+    const category = document.querySelector("#editCategory");
+    if (category && task?.category) category.value = task.category;
+    setupCategorySelect();
+    syncMilestoneDates();
+  }
+
+  function syncMilestoneDates() {
+    const milestone = document.querySelector("#editMilestoneChoice")?.value === "yes";
+    const start = document.querySelector("#editStart");
+    const end = document.querySelector("#editEnd");
+    if (!start || !end) return;
+    if (milestone && end.value) start.value = end.value;
+    start.disabled = milestone;
+    start.closest("label")?.classList.toggle("milestone-date-locked", milestone);
   }
 
   function saveEditorControls() {
@@ -63,6 +132,7 @@
     if (!task) return;
 
     task.milestone = milestone;
+    if (milestone) task.start = task.end;
     localStorage.setItem(storageKey, JSON.stringify(state));
 
     const manualIds = manualCriticalIds();
@@ -184,11 +254,21 @@
 
   document.addEventListener("DOMContentLoaded", () => {
     addEditorControls();
+    refreshCategoryCaption();
     scheduleDecorate();
 
+    document.querySelector("#taskForm")?.addEventListener("submit", syncMilestoneDates, true);
     document.querySelector("#taskForm")?.addEventListener("submit", () => setTimeout(saveEditorControls, 50));
     document.querySelector("#taskTable")?.addEventListener("click", () => setTimeout(syncEditorControls, 0));
     document.querySelector("#addTaskButton")?.addEventListener("click", () => setTimeout(syncEditorControls, 0));
+    document.querySelector("#editMilestoneChoice")?.addEventListener("change", syncMilestoneDates);
+    document.querySelector("#editEnd")?.addEventListener("input", syncMilestoneDates);
+    document.querySelector("#addCategoryButton")?.addEventListener("click", addCategory);
+    document.querySelector("#newCategoryName")?.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      addCategory();
+    });
 
     document.querySelector("#downloadCsvButton")?.addEventListener("click", (event) => {
       event.stopImmediatePropagation();
