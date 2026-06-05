@@ -1,4 +1,24 @@
 (function () {
+  const storagePrefix = "uki-scheduler-panel-production-v1";
+
+  function clearSavedSchedulerState() {
+    Object.keys(localStorage)
+      .filter((key) => key.startsWith(storagePrefix))
+      .forEach((key) => localStorage.removeItem(key));
+  }
+
+  function shouldResetFromUrl() {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("reset") === "1" || params.get("fresh") === "1";
+  }
+
+  if (shouldResetFromUrl()) {
+    clearSavedSchedulerState();
+    const cleanUrl = `${window.location.pathname}?v=20260605-2`;
+    window.location.replace(cleanUrl);
+    return;
+  }
+
   function escapeSvg(value) {
     return String(value || "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
   }
@@ -141,6 +161,10 @@
   }
 
   document.addEventListener("DOMContentLoaded", () => {
+    document.querySelector("#resetButton")?.addEventListener("click", () => {
+      clearSavedSchedulerState();
+      window.location.replace(`${window.location.pathname}?v=20260605-2`);
+    });
     addExportButton();
     new MutationObserver(addExportButton).observe(document.querySelector("main"), { childList: true, subtree: true });
   });
