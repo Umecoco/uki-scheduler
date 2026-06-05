@@ -15,14 +15,37 @@
     return "#237c78";
   }
 
-  function readBarMetrics(row, bar, totalDays, dayWidth) {
-    const timelineWidth = row?.scrollWidth || totalDays * dayWidth;
-    const leftDays = timelineWidth ? (bar.offsetLeft / timelineWidth) * totalDays : 0;
-    const widthDays = timelineWidth ? (bar.offsetWidth / timelineWidth) * totalDays : 1;
-    return {
-      leftDays: Math.max(0, leftDays),
-      widthDays: Math.max(1, widthDays),
-    };
+  function parseDate(value) {
+    const match = String(value || "").match(/(\d{4})-(\d{2})-(\d{2})/);
+    if (!match) return null;
+    return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 12);
+  }
+
+  function daysBetween(start, end) {
+    return Math.round((end - start) / 86400000);
+  }
+
+  function readBarDates(bar) {
+    const matches = String(bar.title || "").match(/\d{4}-\d{2}-\d{2}/g) || [];
+    const start = parseDate(matches[0]);
+    const end = parseDate(matches[1] || matches[0]);
+    return start && end ? { start, end } : null;
+  }
+
+  function readFirstVisibleTaskStart(labels) {
+    const starts = labels
+      .map((label) => readBarDates(label.nextElementSibling?.querySelector(".task-bar"))?.start)
+      .filter(Boolean);
+    return starts.length ? new Date(Math.min(...starts)) : null;
+  }
+
+  function readScheduleStart(dateCells, fallbackDate) {
+    const match = String(dateCells[0]?.textContent || "").match(/(\d{1,2})\/(\d{1,2})/);
+    if (!match || !fallbackDate) return fallbackDate;
+    let start = new Date(fallbackDate.getFullYear(), Number(match[1]) - 1, Number(match[2]), 12);
+    if (daysBetween(start, fallbackDate) > 180) start = new Date(start.getFullYear() - 1, start.getMonth(), start.getDate(), 12);
+    if (daysBetween(fallbackDate, start) > 180) start = new Date(start.getFullYear() + 1, start.getMonth(), start.getDate(), 12);
+    return start;
   }
 
   function exportScheduleImage() {
@@ -38,6 +61,8 @@
     const width = leftWidth + dateCells.length * dayWidth;
     const height = headerHeight + labels.length * rowHeight + 26;
     const todayIndex = dateCells.findIndex((cell) => cell.classList.contains("today"));
+    const firstVisibleTaskStart = readFirstVisibleTaskStart(labels);
+    const scheduleStart = readScheduleStart(dateCells, firstVisibleTaskStart);
 
     let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect width="100%" height="100%" fill="#ffffff"/>`;
     svg += `<rect x="0" y="0" width="${leftWidth}" height="${height}" fill="#ffffff"/><rect x="${leftWidth}" y="0" width="${width - leftWidth}" height="${height}" fill="#fbfcfd"/>`;
@@ -64,7 +89,10 @@
 
       const bar = row?.querySelector(".task-bar");
       if (!bar) return;
-      const { leftDays, widthDays } = readBarMetrics(row, bar, dateCells.length, dayWidth);
+      const dates = readBarDates(bar);
+      if (!dates || !scheduleStart) return;
+      const leftDays = daysBetween(scheduleStart, dates.start);
+      const widthDays = Math.max(1, daysBetween(dates.start, dates.end) + 1);
       const x = leftWidth + leftDays * dayWidth;
       const fill = barColor(bar);
 
