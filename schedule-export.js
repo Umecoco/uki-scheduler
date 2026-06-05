@@ -14,7 +14,7 @@
 
   if (shouldResetFromUrl()) {
     clearSavedSchedulerState();
-    const cleanUrl = `${window.location.pathname}?v=20260605-2`;
+    const cleanUrl = `${window.location.pathname}?v=20260605-3`;
     window.location.replace(cleanUrl);
     return;
   }
@@ -163,7 +163,7 @@
   document.addEventListener("DOMContentLoaded", () => {
     document.querySelector("#resetButton")?.addEventListener("click", () => {
       clearSavedSchedulerState();
-      window.location.replace(`${window.location.pathname}?v=20260605-2`);
+      window.location.replace(`${window.location.pathname}?v=20260605-3`);
     });
     addExportButton();
     new MutationObserver(addExportButton).observe(document.querySelector("main"), { childList: true, subtree: true });
